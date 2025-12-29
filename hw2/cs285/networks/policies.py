@@ -58,9 +58,13 @@ class MLPPolicy(nn.Module):
     @torch.no_grad()
     def get_action(self, obs: np.ndarray) -> np.ndarray:
         """Takes a single observation (as a numpy array) and returns a single action (as a numpy array)."""
-        # TODO: implement get_action
-        action = None
-
+        # FIXED: implement get_action
+        if len(obs.shape) > 1:
+            observation = obs
+        else:
+            observation = obs[None]
+        action = self.forward(ptu.from_numpy(observation))
+        action = ptu.to_numpy(action.sample())
         return action
 
     def forward(self, obs: torch.FloatTensor):
@@ -70,12 +74,14 @@ class MLPPolicy(nn.Module):
         flexible objects, such as a `torch.distributions.Distribution` object. It's up to you!
         """
         if self.discrete:
-            # TODO: define the forward pass for a policy with a discrete action space.
-            pass
+            # FIXED: define the forward pass for a policy with a discrete action space.
+            logits = self.logits_net(obs)
+            return torch.distributions.Categorical(logits=logits)
         else:
-            # TODO: define the forward pass for a policy with a continuous action space.
-            pass
-        return None
+            # FIXED: define the forward pass for a policy with a continuous action space.
+            mean = self.mean_net(obs)
+            std = torch.exp(self.logstd)
+            return torch.distributions.Normal(mean, std)
 
     def update(self, obs: np.ndarray, actions: np.ndarray, *args, **kwargs) -> dict:
         """Performs one iteration of gradient descent on the provided batch of data."""
@@ -96,8 +102,21 @@ class MLPPolicyPG(MLPPolicy):
         actions = ptu.from_numpy(actions)
         advantages = ptu.from_numpy(advantages)
 
-        # TODO: implement the policy gradient actor update.
+        # FIXED: implement the policy gradient actor update.
+        self.optimizer.zero_grad()
         loss = None
+        # 前向传播
+        pred_actions = self.forward(obs)
+        log_probs = pred_actions.log_prob(actions)
+        
+        # 连续动作需要对各维度求和
+        if not self.discrete:
+            log_probs = log_probs.sum(dim=-1)
+        
+        # 策略梯度损失（使用 mean）
+        loss = torch.neg(torch.mul(log_probs, advantages)).mean()
+        loss.backward()
+        self.optimizer.step()
 
         return {
             "Actor Loss": ptu.to_numpy(loss),
